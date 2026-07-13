@@ -1,103 +1,67 @@
 import fs from "fs-extra";
-import path from "path";
 
 import Logger from "../../core/Logger.js";
-import config from "../../config/config.js";
+import BaseService from "../BaseService.js";
 import YtDlpProvider from "./providers/YtDlpProvider.js";
 
-class DownloaderService {
+class DownloaderService extends BaseService {
 
     constructor() {
+        super("DownloaderService");
 
         this.provider = YtDlpProvider;
-
-        this.initialized = false;
-
     }
 
     async init() {
-
-        if (this.initialized)
-            return;
+        if (this.isReady()) return;
 
         await this.provider.init();
 
-        this.initialized = true;
-
-        Logger.success(
-            "Downloader Service Initialized"
-        );
-
+        await super.init();
     }
 
     async getInfo(url) {
-
         await this.init();
-
         return this.provider.getInfo(url);
-
     }
 
     async downloadVideo(url, options = {}) {
-
         await this.init();
-
-        return this.provider.downloadVideo(
-            url,
-            options
-        );
-
+        return this.provider.downloadVideo(url, options);
     }
 
     async downloadAudio(url, options = {}) {
-
         await this.init();
-
-        return this.provider.downloadAudio(
-            url,
-            options
-        );
-
+        return this.provider.downloadAudio(url, options);
     }
 
     async download(url, type = "video", options = {}) {
-
         await this.init();
-
-        return this.provider.download(
-            url,
-            type,
-            options
-        );
-
+        return this.provider.download(url, type, options);
     }
 
     async getThumbnail(url) {
-
         await this.init();
-
-        return this.provider.getThumbnail(
-            url
-        );
-
+        return this.provider.getThumbnail(url);
     }
 
     async sendResult(client, jid, result, quoted = null) {
 
-        if (!result)
-            throw new Error(
-                "Download result is empty."
-            );
+        this.ensureInitialized();
 
-        const exists =
-            await fs.pathExists(
-                result.filePath
-            );
+        if (!client)
+            throw new Error("Client is required.");
+
+        if (!jid)
+            throw new Error("JID is required.");
+
+        if (!result)
+            throw new Error("Download result is empty.");
+
+        const exists = await fs.pathExists(result.filePath);
 
         if (!exists)
-            throw new Error(
-                "Downloaded file not found."
-            );
+            throw new Error("Downloaded file not found.");
 
         const message = {};
 
@@ -107,11 +71,8 @@ class DownloaderService {
                 url: result.filePath
             };
 
-            message.mimetype =
-                "audio/mpeg";
-
-            message.fileName =
-                `${result.title}.mp3`;
+            message.mimetype = "audio/mpeg";
+            message.fileName = `${result.title}.mp3`;
 
         } else {
 
@@ -119,45 +80,42 @@ class DownloaderService {
                 url: result.filePath
             };
 
-            message.mimetype =
-                "video/mp4";
-
-            message.fileName =
-                `${result.title}.mp4`;
+            message.mimetype = "video/mp4";
+            message.fileName = `${result.title}.mp4";
 
         }
 
-        message.caption =
-            result.title;
+        if (result.title) {
+            message.caption = result.title;
+        }
 
         await client.sendMessage(
             jid,
             message,
-            {
-                quoted
-            }
+            { quoted }
         );
 
         return true;
-
     }
 
     async cleanup(result) {
 
-        if (!result)
-            return;
+        if (!result?.filePath)
+            return false;
 
         try {
 
-            await this.provider.cleanup(
-                result.filePath
-            );
+            await this.provider.cleanup(result.filePath);
 
-        } catch (err) {
+            return true;
+
+        } catch (error) {
 
             Logger.warn(
-                "Failed cleaning temporary file."
+                `Cleanup failed: ${error.message}`
             );
+
+            return false;
 
         }
 
